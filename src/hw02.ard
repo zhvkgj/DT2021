@@ -45,7 +45,7 @@
   | zero      => nil
   | suc count => (f base) :: (iterateCount f (f base) count)
 
-\func natList10 => (iterateCount {Nat} (\lam x => suc x) 10 9)
+\func natList10 => iterateCount {Nat} (\lam x => suc x) 10 9
 \func natList5 => 15 :: 23 :: 4 :: 3 :: 12 :: nil
 
 \func sortTest1 : (insertionSort natList5 compareNat) = 3 :: 4 :: 12 :: 15 :: 23 :: nil => idp
@@ -54,17 +54,14 @@
 
 -- 3. Докажите ассоциативность && и ||.
 
-\func &&-assoc (x y z : Bool) : (x && y) && z = x && (y && z) \elim x, y, z
-  | true, _, _          => idp
-  | false, true, _      => idp
-  | false, false, true  => idp
-  | false, false, false => idp
+\func &&-assoc (x y z : Bool) : (x && y) && z = x && (y && z) \elim x
+  | true  => idp
+  | false => idp
 
-\func ||-assoc (x y z : Bool) : (x || y) || z = x || (y || z) \elim x, y, z
-  | true, _, _          => idp
-  | false, true, _      => idp
-  | false, false, true  => idp
-  | false, false, false => idp
+\func ||-assoc (x y z : Bool) : (x || y) || z = x || (y || z) \elim x
+  | true  => idp
+  | false => idp
+
 
 -- 4. Докажите, что fac 3 равно 6.
 
