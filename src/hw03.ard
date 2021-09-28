@@ -1,13 +1,22 @@
 \import Utils
+\import lect03
 \open Nat(+,*)
 
 -- 1. Чему равно fileTest (в нормальной форме)? Докажите это.
+\func fileTestNF : fileTest = (foobar, 8, 13, 55, 18, 21) => idp
 
 -- 2. Чему равно M5.t''' (в нормальной форме)? Докажите это.
+\func M5_t'''NF : M5.t''' = ((82, 42, 61, 82, 34, 42, 61, 29), 25, (42, 29)) => idp
 
 -- 3. Докажите ассоциативность ++.
 
-\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) => {?}
+\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) \elim xs
+  | nil => idp
+  | :: a xs => pmap (a ::) (++-assoc xs ys zs)
+
+\func ++-commWithNil {A : \Type} (xs : List A) : xs ++ nil = nil ++ xs \elim xs
+  | nil => idp
+  | :: a xs => pmap (a ::) (++-commWithNil xs)
 
 -- 4. Докажите, что reverse (reverse xs) = xs, где reverse определен через ++.
 
@@ -16,12 +25,46 @@
   | :: x xs => reverse xs ++ x :: nil
 
 -- Это утверждение будет полезно для доказательства.
-\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs => {?}
+\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs
+  | nil, nil => idp
+  | nil, :: a ys => sym (++-commWithNil (reverse ys ++ a :: nil))
+  | :: a xs, nil => pmap (\lam ls => reverse ls ++ a :: nil) (++-commWithNil xs)
+  | :: a xs, :: a1 ys =>
+    pmap (\lam l => l ++ a :: nil) (reverse++ xs (a1 :: ys)) *>
+    ++-assoc (reverse ys ++ a1 :: nil) (reverse xs) (a :: nil)
 
-\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs => {?}
+\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs
+  | nil => idp
+  | :: a xs => reverse++ (reverse xs) (a :: nil) *> pmap (a ::) (reverse-isInvolutive xs)
 
 -- 5. Докажите дистрибутивность умножения над сложением для натуральных чисел.
 
-\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n => {?}
+\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n \elim n
+  | 0 => idp
+  | suc n =>
+    pmap (\lam x => x + (m + k)) (rdistr n m k) *>
+    +-assoc (m * n) (k * n) (m + k) *>
+    pmap (m * n +) (+-comm (k * n) (m + k) *> +-assoc m k (k * n) *> pmap (m +) (+-comm k (k * n))) *>
+    sym (+-assoc (m * n) m (k * n + k))
 
-\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k => {?}
+\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k =>
+  *-comm n (m + k) *>
+  rdistr n m k *>
+  pmap (m * n +) (*-comm k n) *>
+  pmap (\lam x => x + n * k) (*-comm m n)
+
+\func *-comm (x y : Nat) : x * y = y * x
+  | 0, 0 => idp
+  | 0, suc y => *-comm 0 y
+  | suc x, 0 => *-comm x 0
+  | suc x, suc y => pmap suc
+      (
+        pmap (\lam l => l + x) (*-comm (suc x) y) *>
+        +-assoc (y * x) y x *>
+        pmap (\lam l => l + (y + x)) (sym (*-comm x y)) *>
+        pmap (x * y +) (+-comm y x) *>
+        sym (+-assoc (x * y) x y) *>
+        -- pmap (\lam l => l + y) (sym (*-comm (suc y) x)) <--- Почему компилятор ругается, если заменить последнее правило вывода на указанное?
+        pmap (\lam l => l + y) (*-comm x (suc y))
+      )
+
