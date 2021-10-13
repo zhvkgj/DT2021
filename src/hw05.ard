@@ -1,9 +1,21 @@
+\import Function
+\import Function.Meta
 \import Utils
+\import lect01 (three)
 \import lect04 (+-comm,+')
+\import lect05 (Nat-elim, Nat-rec, v++-assoc)
 
 -- 1. Определите факториал через Nat-rec.
 
+\func facNatRec (n : Nat) : Nat => Nat-rec Nat 1 (\lam x fac => suc x * fac) n
+
+\func facNatRecTest0 : facNatRec 0 = 1 => idp
+\func facNatRecTest1 : facNatRec 1 = 1 => idp
+\func facNatRecTest5 : facNatRec 5 = 120 => idp
+
 -- 2. Докажите ассоциативность сложения для натуральных чисел через Nat-elim.
+\func +-assoc (x y z : Nat) : (x +' y) +' z = x +' (y +' z)
+  => Nat-elim (\lam z' => (x +' y) +' z' = x +' (y +' z')) idp (\lam _ assoc => pmap suc assoc) z
 
 -- 3. Определите рекурсор и элиминатор для D.
 
@@ -12,18 +24,56 @@
   | con2 D D
   | con3 (Nat -> D)
 
+\func D-elim (P : D -> \Type)
+             (oneNat : \Pi (n : Nat) -> P $ con1 n)
+             (twoD : \Pi (d1 d2 : D) -> P d1 -> P d2 -> P $ con2 d1 d2)
+             (funcNatToD : \Pi (f : Nat -> D) -> (\Pi (n : Nat) -> P $ f n) -> P $ con3 f)
+             (x : D) : P x
+  \elim x
+    | con1 n => oneNat n
+    | con2 x1 x2 => twoD x1 x2 (D-elim P oneNat twoD funcNatToD x1) (D-elim P oneNat twoD funcNatToD x2)
+    | con3 _x => funcNatToD _x (\lam n => D-elim P oneNat twoD funcNatToD (_x n))
+
+\func D-rec (P : \Type)
+            (oneNat : Nat -> P)
+            (twoD : D -> D -> P -> P -> P)
+            (funcNatToD : (Nat -> D) -> (Nat -> P) -> P)
+            (x : D) : P
+  => D-elim (\lam _ => P) oneNat twoD funcNatToD x
+
 {- To check that the definition of D-elim and D-rec is correct, you can try to implement foo using D-rec.
+
+-}
 \func foo (d : D) : Nat
   | con1 n => n
   | con2 d1 d2 => foo d1 Nat.+ foo d2
   | con3 g => foo (g (foo (g 100)))
--}
+
+\func foo' (d : D) : Nat => D-rec Nat id (\lam d1 d2 => Nat.+) (\lam g h => h $ h 100) d
+
+\func testEq1 : foo (con1 42) = foo' (con1 42) => idp
+\func testEq2 : foo (con2 # con1 42 # con2 (con1 13) (con1 93)) = foo' (con2 # con1 42 # con2 (con1 13) (con1 93)) => idp
+\func testEq3 : foo (con2 # con3 con1 # con2 (con1 42) (con1 13)) = foo' (con2 # con3 con1 # con2 (con1 42) (con1 13)) => idp
 
 -- 4. Определите рекурсор и элиминатор для List.
 
+\func List-elim {A : \Type} (P : List A -> \Type)
+                            (empty : P nil)
+                            (cons : \Pi (a : A) (ls : List A) -> P ls -> P $ a :: ls)
+                            (ls : List A) : P ls
+  \elim ls
+    | nil => empty
+    | :: a ls => cons a ls $ List-elim P empty cons ls
+
+\func List-rec {A : \Type} (P : \Type)
+                           (empty : P)
+                           (cons : A -> List A -> P -> P)
+                           (ls : List A) : P
+  => List-elim (\lam _ => P) empty cons ls
+
 -- 5. Докажите pmap при помощи паттерн матчинга с idp.
 
-\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' => {?}
+\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' \elim p | idp => idp
 
 -- Optional:
 -- 6. У оператора J есть другая форма, которую мы будем называть Jalt. Докажите, что J и Jalt эквивалентны, то есть выразите одно через другое и наоборот.
@@ -50,7 +100,11 @@
 
 -- 7. Докажите, что (\lam x => not (not x)) = (\lam x => x).
 
-\func notNotId : (\lam x => not (not x)) = (\lam x => x) => {?}
+\func notNotA (a : Bool) : not (not a) = a
+  | true => idp
+  | false => idp
+
+\func notNotId : (\lam x => not (not x)) = (\lam x => x) => path (\lam i b => notNotA b @ i)
 
 -- 8. Докажите, что fac не равен suc.
 
@@ -60,35 +114,41 @@
   | 0 => 1
   | suc n => suc n * fac n
 
-\func fac/=suc (p : fac = suc) : Empty => {?}
+\func fac/=suc (p : fac = suc) : Empty => transport (\lam f => \case f 1 \with {| 1 => \Sigma | _ => Empty}) p ()
 
 -- 9. Докажите, что left = right, не используя transport, coe и паттерн матчинг с idp.
 
-\func left=right : left = right => {?}
+\func left=right : left = right => path id
 
 -- 10. Докажите, что если a = a' и b = b', то (a,b) = (a',b'), не используя transport, coe и паттерн матчинг с idp.
 
-\func pairEq {A B : \Type} {a a' : A} {b b' : B} (p : a = a') (q : b = b') : (a,b) = (a',b') => {?}
+\func pairEq {A B : \Type} {a a' : A} {b b' : B} (p : a = a') (q : b = b') : (a,b) = (a',b')
+  => path (\lam i => (p @ i, q @ i))
 
 -- 11. Докажите, что если p = p', то p.1 = p'.1, не используя transport, coe и паттерн матчинг с idp.
 
-\func projEq {A : \Type} (B : A -> \Type) {p p' : \Sigma (x : A) (B x)} (t : p = p') : p.1 = p'.1 => {?}
+\func projEq {A : \Type} (B : A -> \Type) {p p' : \Sigma (x : A) (B x)} (t : p = p') : p.1 = p'.1
+  => path (\lam i => (t @ i).1)
 
 -- 12. Докажите pmap2, не используя transport, coe и паттерн матчинг с idp.
 
-\func pmap2' {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+\func pmap2' {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b'
+  => path (\lam i => f # p @ i # q @ i)
 
 -- 13. Мы видели как определить transport через coe. Определите частный случай coe через transport.
 
-\func coe0 (A : I -> \Type) (a : A left) : A right => {?}
+\func coe0 (A : I -> \Type) (a : A left) : A right => transport A left=right a
 
 -- 14. Определите функцию B right -> B left.
 
-\func Itr' {B : I -> \Type} (b : B right) : B left => {?}
+\func Itr' {B : I -> \Type} (b : B right) : B left => transport B (sym left=right) b
 
 -- 15. Докажите, что vnil является нейтральным элементом для v++.
 
-\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs => {?}
+\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs
+  \elim n, xs
+    | 0, vnil => idp
+    | suc n, vcons a xs => v++-assoc.transport-vcons a _ (+-comm 0 n) *> pmap (vcons a) (vnil-rightId xs)
   \where {
     \func \infixl 4 v++ {A : \Type} {n m : Nat} (xs : Vec A n) (ys : Vec A m) : Vec A (m +' n) \elim n, xs
       | 0, vnil => ys
