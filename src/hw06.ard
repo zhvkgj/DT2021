@@ -1,45 +1,169 @@
+\import Algebra.Meta
+\import Function.Meta
+\import Meta
+\import Paths.Meta
 \import Utils
+\import lect05 (funExt)
 \import lect06
-\open Nat(+)
+\open Nat (+)
 
 -- 1. Определите функцию swap несколькими способами.
 
 -- При помощи \cowith и доступа к полям.
-\func swap {A B : \Type} (p : Pair A B) : Pair B A => {?}
+
+\func swap {A B : \Type} (p : Pair A B) : Pair B A \cowith
+  | fst_ => p.snd_
+  | snd_ => p.fst_
 
 -- При помощи \new и паттерн матчинга.
-\func swap' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+
+\func swap' {A B : \Type} (p : Pair A B) : Pair B A \elim p
+  | (a,b) => \new Pair {
+    | fst_ => b
+    | snd_ => a
+  }
 
 -- При помощи \new и доступа к полям.
-\func swap'' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+
+\func swap'' {A B : \Type} (p : Pair A B) : Pair B A => \new Pair {
+  | fst_ => p.snd_
+  | snd_ => p.fst_
+}
 
 -- 2. Докажите, что swap (swap p) = p.
 
-\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => {?}
+\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => idp
 
 -- 3. Докажите, что тип PosNat 0 пустой, а тип PosNat 1 нет.
 
-\func zero-isNotPos (p : PosNat 0) : Empty => {?}
+\func zero-isNotPos (p : PosNat 0) : Empty => p.p
 
-\func one-isPos : PosNat 1 => {?}
+\func one-isPos : PosNat 1 => \new PosNat 1 ()
 
 -- 4. Определите \record, состоящий из пар взаимно простых натуральных чисел.
+
+\import hw01 (compose, gcd)
+\import hw04 (<)
+
+\func isComprimeNat (x y : Nat) : Bool =>
+  \case gcd x y \with {
+    | suc 0 => true
+    | _ => false
+  }
+
+\record CoprimePairNat
+  | fst_ : Nat
+  | snd_ : Nat
+  | isComprime : T (isComprimeNat fst_ snd_)
+
+\func testCoprimePairNat1 : CoprimePairNat 144 111 -> Empty => \lam (p : CoprimePairNat) => p.isComprime
+
+\func testCoprimePairNat2 : CoprimePairNat 144 122 -> Empty => \lam (p : CoprimePairNat) => p.isComprime
+
+\func testCoprimePairNat3 : CoprimePairNat 327 110 -> \Sigma => \lam (p : CoprimePairNat) => p.isComprime
+
+\func testCoprimePairNat4 : CoprimePairNat 11 31 -> \Sigma => \lam (p : CoprimePairNat) => p.isComprime
+
 --    Определите тип, состоящий из натуральных чисел, взаимно простых с 60.
+
+\func isComprimeWithSixty (n : Nat) : Bool => isComprimeNat n 60
+
+\record ComprimeWithSixtyNat
+  | nat : Nat
+  | isComprime_ : T (isComprimeWithSixty nat)
+
+\func testComprimeWithSixtyNat1 : ComprimeWithSixtyNat 144 -> Empty => \lam (p : ComprimeWithSixtyNat) => p.isComprime_
+
+\func testComprimeWithSixtyNat2 : ComprimeWithSixtyNat 65 -> Empty => \lam (p : ComprimeWithSixtyNat) => p.isComprime_
+
+\func testComprimeWithSixtyNat3 : ComprimeWithSixtyNat 97 -> \Sigma => \lam (p : ComprimeWithSixtyNat) => p.isComprime_
+
+\func testComprimeWithSixtyNat4 : ComprimeWithSixtyNat 31 -> \Sigma => \lam (p : ComprimeWithSixtyNat) => p.isComprime_
 
 -- 5. Закончите определение класса монад. Этот класс должен содержать все монадные законы и реализовывать все поля из класса функторов.
 
 \class Monad \extends Functor
   | return {A : \Set} : A -> F A
   | \infixl 1 >>= {A B : \Set} : F A -> (A -> F B) -> F B
+  | left-identity {A B : \Set} (a : A) (h : A -> F B) : (return a >>= h) = h a
+  | right-identity {A : \Set} (m : F A) : (m >>= return) = m
+  | associativity {A B C : \Set} (m : F A) (f : A -> F B) (g : B -> F C) : (m >>= (\lam x => f x >>= g)) = ((m >>= f) >>= g)
+  | fmap f x => x >>= (\lam x => return $ f x)
+  | fmap-id t => right-identity t
+  | fmap-comp f g t =>
+    equation
+        (fmap (\lam x => g (f x)) t) {
+      pmap (t >>=) (funExt _ (\lam x => sym $ left-identity (f x) (\lam y => return (g y))))
+    }
+        (t >>= (\lam x => return (f x) >>= (\lam x => return (g x)))) {
+      associativity t (\lam x => return $ f x) (\lam x => return $ g x)
+    }
+        (t >>= (\lam x => return (f x)) >>= (\lam x => return (g x))) {
+      idp
+    }
+        (fmap g (fmap f t))
 
 -- 6. Определите \instance Monad для Maybe.
 
-\instance MaybeMonad : Monad Maybe => {?}
+\instance MaybeMonad : Monad Maybe
+  | return {A : \Set} (a : A) : Maybe A => just a
+  | >>= {A B : \Set} (a : Maybe A) (f : A -> Maybe B) : Maybe B \elim a {
+    | nothing => nothing
+    | just a => f a
+  }
+  | left-identity {A B : \Set} (a : A) (h : A -> Maybe B)
+  : (return a >>= h) = h a => idp
+  | right-identity {A : \Set} (m : Maybe A) : (m >>= return) = m \elim m {
+    | nothing => idp
+    | just a => idp
+  }
+  | associativity {A B C : \Set} (m : Maybe A) (f : A -> Maybe B) (g : B -> Maybe C)
+  : (m >>= (\lam x => f x >>= g)) = ((m >>= f) >>= g) \elim m {
+    | nothing => idp
+    | just a => idp
+  }
 
 -- 7. Определите \instance Monad для State и State'.
 
 \record State (S A : \Type)
   | state : S -> \Sigma S A
 
+\instance MonadState {S : \Set} : Monad (State S)
+  | return {A : \Set} (a : A) : State S A => \new State {
+    | state => \lam s => (s, a)
+  }
+  | >>= {A B : \Set} (s : State S A) (f : A -> State S B) : State S B
+  => \new State {
+    | state => \lam st =>
+        \let | (st', x) => s.state st
+             | s' => f x
+        \in state {s'} st'
+  }
+  | left-identity {A B : \Set} (a : A) (h : A -> State S B)
+  : (return a >>= h) = h a => idp
+  | right-identity {A : \Set} (m : State S A) : (m >>= return) = m => idp
+  | associativity {A B C : \Set} (m : State S A) (f : A -> State S B) (g : B -> State S C)
+  : (m >>= (\lam x => f x >>= g)) = ((m >>= f) >>= g) => idp
+
 \data State' (S A : \Type)
   | state' (S -> \Sigma S A)
+
+\func runState' {S A : \Type} (s : State' S A) : S -> \Sigma S A \elim s
+  | state' _x => _x
+
+\func state'RunState'Inv {S A : \Set} (s : State' S A) : state' (runState' s) = s => cases s idp
+
+\instance MonadState' {S : \Set} : Monad (State' S)
+  | return {A : \Set} (a : A) : State' S A => state' (\lam s => (s, a))
+  | >>= {A B : \Set} (s : State' S A) (f : A -> State' S B) : State' S B =>
+  state' (\lam st =>
+      \let | (st', x) => runState' s st
+           | m' => f x
+      \in runState' m' st')
+  | left-identity {A B : \Set} (a : A) (h : A -> State' S B) : (return a >>= h) = h a
+    => state'RunState'Inv $ h a
+  | right-identity {A : \Set} (m : State' S A) : (m >>= return) = m \elim m {
+    | state' _x => idp
+  }
+  | associativity {A B C : \Set} (m : State' S A) (f : A -> State' S B) (g : B -> State' S C)
+  : (m >>= (\lam x => f x >>= g)) = ((m >>= f) >>= g) => idp
