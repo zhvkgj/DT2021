@@ -151,14 +151,23 @@
 -- 11. Докажите, что функции FromBoolToDec и FromDecToBool взаимно обратны.
 
 \func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p
-  => funExt (\lam _ => Bool) (\lam a => {?})
+  => funExt (\lam _ => Bool) (\lam a => unfold (FromDecToBool, FromBoolToDec) (cases (p a) \with {
+    | true => idp
+    | false => idp
+  }))
 
 -- Мы не можем доказать, что FromBoolToDec (FromDecToBool P) = P, но мы можем доказать более слабое утверждение: эти предикаты логически эквивалентны.
 -- Для этого введем эквивалентность предикатов.
 
 \func dbd {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P))
   : \Pi (x : A) -> (FromBoolToDec (FromDecToBool P)).1 x <-> P.1 x
-  => {?}
+  => \lam x => (unfold (FromDecToBool, FromBoolToDec) (cases (unfold (P.2 x)) \with {
+    | yes a => \lam _ => a
+    | no n => absurd
+  }), unfold (FromDecToBool, FromBoolToDec) (cases (unfold (P.2 x)) \with {
+    | yes a => \lam _ => ()
+    | no n => n
+  }))
 
 -- Optional:
 -- 12. Парадокс Рассела показывает, что не существует множества всех множеств.
