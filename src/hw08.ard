@@ -1,6 +1,16 @@
+\import Algebra.Meta
+\import Arith.Nat
 \import Data.Bool
 \import Data.List \hiding (headDef)
-\import Utils (<->)
+\import Data.Or
+\import Function.Meta
+\import Logic (absurd)
+\import Logic.Meta
+\import Meta
+\import Paths
+\import Paths.Meta
+\import Utils (<->, sym)
+\import hw05 (fac)
 \import lect08
 \import Order.LinearOrder
 \open LinearOrder
@@ -10,15 +20,127 @@
 --    * Все элементы filter p xs удовлетворяют предикату p
 --    * Любой подсписок xs с тем же свойством является подсписком filter p xs
 
+\module Filter \where {
+
+  \func filter {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+    | nil => nil
+    | :: x xs => \case p x \with {
+      | true => x :: filter p xs
+      | false => filter p xs
+    }
+
+  \data Sublist {A : \Type} (xs ys : List A) \with
+    | nil, _ => sublist-nil
+    | :: a xs, :: b ys => { sublist-head (a = b) (Sublist xs ys) | sublist-further (Sublist (a :: xs) ys) }
+
+  \func farther-lem {A : \Type} {a : A} {xs ys : List A} (xs<-ys : Sublist xs ys) : Sublist xs (a :: ys) \elim xs, ys, xs<-ys
+    | nil, ys, sublist-nil => sublist-nil
+    | :: a1 xs, :: b ys, sublist-head p xs<-ys => sublist-further $ sublist-head p xs<-ys
+    | :: a1 xs, :: b ys, sublist-further xs<-ys => sublist-further (farther-lem xs<-ys)
+
+  \func filteredIsSublist {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) xs \elim xs
+    | nil => sublist-nil
+    | :: a xs => mcases \with {
+    | true => sublist-head idp $ filteredIsSublist p xs
+    | false => farther-lem $ filteredIsSublist p xs
+  }
+
+  \data Satisfy {A : \Type} (p : A -> Bool) (xs : List A) \with
+    | _, nil => satisfy-nil
+    | p, :: a xs => satisfy-cons (p a = true) (Satisfy p xs)
+
+  \func filteredSatisfy {A : \Type} (p : A -> Bool) (xs : List A) : Satisfy p (filter p xs) \elim xs
+    | nil => satisfy-nil
+    | :: a xs => cases (p a arg addPath) \with {
+      | true, q => satisfy-cons q $ filteredSatisfy p xs
+      | false, _ => filteredSatisfy p xs
+    }
+
+  \func sublistIsFilteredSublist {A : \Type} (p : A -> Bool) (ys xs : List A) (ys-sublist-xs : Sublist ys xs)
+                                 (ys-satisfy-p : Satisfy p ys) : Sublist ys (filter p xs) \elim ys, xs
+    | nil, _ => sublist-nil
+    | :: a ys, nil => ys-sublist-xs
+    | :: a ys, :: a1 xs => cases (p a1 arg addPath, ys-sublist-xs, ys-satisfy-p) \with {
+      | false, q, sublist-head p1 _, satisfy-cons p2 _ \as sfy =>
+        sublistIsFilteredSublist _ _ _ (Logic.absurd $ true/=false (sym p2 *> pmap p p1 *> q)) sfy
+      | false, _, sublist-further ys-sublist-xs, sfy =>
+        sublistIsFilteredSublist _ _ _ ys-sublist-xs sfy
+      | true, _, sublist-head p1 ys-sublist-xs, satisfy-cons _ ys-satisfy-p =>
+        sublist-head p1 $ sublistIsFilteredSublist _ _ _ ys-sublist-xs ys-satisfy-p
+      | true, _, sublist-further ys-sublist-xs, sfy =>
+        sublist-further $ sublistIsFilteredSublist _ _ _ ys-sublist-xs sfy
+    }
+}
+
 -- 2. Докажите, что Perm l1 l2 тогда и только тогда, когда Insertion.sort l1 = Insertion.sort l2.
+\func permCriterion {A : Dec} (l1 l2 : List A) : Perm l1 l2 <-> (Insertion.sort l1 = Insertion.sort l2)
+  => (perm-to-sort __, sort-to-perm __)
+  \where {
+    \func perm-to-sort {A : Dec} {l1 l2 : List A} (perm : Perm l1 l2) : Insertion.sort l1 = Insertion.sort l2 \elim l1, l2, perm
+      | nil, nil, _ => idp
+      | :: _ l1, :: y l2, perm-cons p perm => rewrite p (pmap # Insertion.sort.insert y # perm-to-sort perm)
+      | l1, l2, perm-trans {zs} perm1 perm2 => perm-to-sort perm1 *> perm-to-sort perm2
+      | :: _ (:: _ _), :: y (:: y' l2), perm-swap p p1 p2 => run {
+        rewrite (pmap Insertion.sort p2, p, p1),
+        Insertion.sort-perm.insert-comm y' y,
+        Insertion.sort l2
+      }
+
+    \func sort-to-perm {A : Dec} {l1 l2 : List A} (s : Insertion.sort l1 = Insertion.sort l2) : Perm l1 l2 \elim l1, l2, s
+      | xs, ys, s => run {
+        perm-trans,
+        perm-trans Insertion.sort-perm xs,
+        rewrite s perm-refl,
+        perm-sym,
+        Insertion.sort-perm ys
+      }
+  }
 
 -- 3. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
 
-\func completeness {A : Dec} (sort : List A -> List A) (l : List A) (p : Perm l (sort l)) (s : Sorted (sort l)) : sort l = Insertion.sort l
-  => {?}
+\func perm-sym {A : \Type} {xs ys : List A} (perm : Perm xs ys) : Perm ys xs \elim xs, ys, perm
+  | nil, nil, perm-nil => perm-nil
+  | :: _ _, :: _ _, perm-cons p perm => perm-cons # sym p # perm-sym perm
+  | _, _, perm-trans perm1 perm2 => perm-trans # perm-sym perm2 # perm-sym perm1
+  | :: _ (:: _ _), :: _ (:: _ _), perm-swap p p1 p2 => perm-swap # sym p1 # sym p # sym p2
+
+\func completeness {A : Dec} (sort : List A -> List A) (l : List A) (p : Perm l (sort l))
+                   (s : Sorted (sort l)) : sort l = Insertion.sort l =>
+  completeness-lem (sort l) (Insertion.sort l) s (Insertion.sort-sorted l) (perm-trans # perm-sym p # Insertion.sort-perm l)
+  \where {
+
+    \func completeness-lem {A : Dec} (l1 l2 : List A) (sorted1 : Sorted l1) (sorted2 : Sorted l2) (perm : Perm l1 l2) : l1 = l2 \elim l1, l2, sorted1, sorted2, perm
+      | nil, nil, _, _, _ => idp
+      | :: a l1, l2, sorted1, sorted2, perm => sym (sorted-is-sorted sorted1) *> permCriterion.perm-to-sort perm *> sorted-is-sorted sorted2
+      | nil, :: a l2, sorted1, sorted2, perm => permCriterion.perm-to-sort perm *> sorted-is-sorted sorted2
+
+    \func sorted-is-sorted {A : Dec} {xs : List A} (sorted : Sorted xs) : Insertion.sort xs = xs \elim xs, sorted
+      | nil, _ => idp
+      | :: x xs, sorted-cons x<= sorted => insert-in-sorted x (Insertion.sort-sorted xs) (rewrite (sorted-is-sorted sorted) x<=) *> pmap (x ::) (sorted-is-sorted sorted)
+
+    \func insert-in-sorted {A : Dec} (a : A) {xs : List A} (sorted : Sorted xs) (a<= : a <= headDef a xs) : Insertion.sort.insert a xs = a :: xs \elim xs, sorted
+      | nil, _ => idp
+      | :: x xs, sorted-cons _x sorted => mcases \with {
+        | inl _ => contradiction
+        | inr _ => idp
+      }
+  }
+
 
 -- 4. Определите факториал через хвостовую рекурсию.
 --    Докажите, что он равен обычному определению факториала.
+
+\func tailrec-fac (x : Nat) (acc : Nat) : Nat \elim x
+  | 0 => acc
+  | suc x => tailrec-fac x (suc x Nat.* acc)
+  \where {
+    \lemma =fac (n : Nat) : tailrec-fac n 1 = fac n => aux n 1
+      \where
+        \lemma aux (n k : Nat) : tailrec-fac n k = fac n Nat.* k \elim n
+          | 0 => NatSemiring.*-comm
+          | suc n => aux n (suc n Nat.* k) *> inv NatSemiring.*-assoc *> pmap (__ Nat.* k) NatSemiring.*-comm
+  }
+
 
 -- 5. Определите функцию, которая проверяет правильность скобочной последовательности.
 --    Докажите ее корректность.
