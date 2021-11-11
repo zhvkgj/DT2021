@@ -87,13 +87,7 @@
       }
 
     \func sort-to-perm {A : Dec} {l1 l2 : List A} (s : Insertion.sort l1 = Insertion.sort l2) : Perm l1 l2 \elim l1, l2, s
-      | xs, ys, s => run {
-        perm-trans,
-        perm-trans Insertion.sort-perm xs,
-        rewrite s perm-refl,
-        perm-sym,
-        Insertion.sort-perm ys
-      }
+      | xs, ys, s => perm-trans (perm-trans (Insertion.sort-perm xs) (rewrite s perm-refl)) (perm-sym $ Insertion.sort-perm ys)
   }
 
 -- 3. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
@@ -148,7 +142,16 @@
 \data Paren | Left | Right
 
 \func isBalanced (xs : List Paren) : Bool
-  => {?}
+  => helper xs 0
+      \where {
+        \func helper (xs : List Paren) (acc : Nat) : Bool \elim xs, acc
+          | nil, 0 => true
+          | :: Left xs, 0 => helper xs 1
+          | :: Left xs, acc => helper xs (suc acc)
+          | :: Right xs, suc acc => helper xs acc
+          | :: Right xs, 0 => false
+          | nil, suc acc => false
+      }
 
 \data Balanced (xs : List Paren) \with
   | nil => nil-balanced
@@ -156,4 +159,4 @@
   | xs => append-balanced {ys zs : List Paren} (Balanced ys) (Balanced zs) (xs = ys ++ zs)
 
 \func isBalanced-correct (xs : List Paren) : (isBalanced xs = true) <-> Balanced xs
-  => {?}
+  => ({?}, {?})
