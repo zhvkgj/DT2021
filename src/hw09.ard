@@ -1,11 +1,26 @@
+\import Algebra.Meta
 \import Data.List
+\import Data.Or
+\import Function
+\import Function.Meta
+\import Logic.Meta
+\import Meta
 \import Order.LinearOrder
+\import Paths
+\import Paths.Meta
 \import Utils (Maybe, just, maybe, nothing)
-\import lect07(Decide)
+\import hw07
+\import lect05 (funExt)
+\import lect07(Decide, no, yes)
 \import lect09
 \open LinearOrder
 
 -- 1. Закончите определение \instance Monad для Term.
+\func isLam {V : \Set} (t : Term V) : Decide (\Sigma (t1 : Term (Maybe V)) (t = lam t1)) \elim t
+  | lam t => yes (t,idp)
+  | app _ _ => no (\lam (_,p) => \case p)
+  | var _ => no (\lam (_,p) => \case p)
+  | unit => no (\lam (_,p) => \case p)
 
 \instance TermMonad : Monad Term
   | return => var
@@ -15,36 +30,111 @@
     | app t1 t2 => app (t1 >>= k) (t2 >>= k)
     | lam t => lam (t >>= liftM k)
   }
-  | return-left => {?}
-  | return-right => {?}
-  | >>=-assoc => {?}
+  | return-left _ _ => idp
+  | return-right {A : \Set} (m : Term A) : m >>= var = m \elim m {
+    | app m1 m2 => pmap2 app # return-right m1 # return-right m2
+    | lam m => rewrite liftM-var=var $ pmap lam $ return-right m
+    | var _ => idp
+    | unit => idp
+  }
+  | >>=-assoc {A B C : \Set} (m : Term A) (k : A -> Term B) (l : B -> Term C) : m >>= k >>= l = m >>= (\lam x => k x >>= l) \elim m {
+    | app m1 m2 => pmap2 app # >>=-assoc m1 k l # >>=-assoc m2 k l
+    | lam m => pmap lam (unfold (liftM) {?})
+    | var v => idp
+    | unit => idp
+  }
+  \where {
+    \func liftM-var=var {A : \Set} : liftM var = var {Maybe A}
+      => funExt (\lam _ => Term (Maybe A)) (\lam a => cases a idp)
 
+    \func fmap-composition {A B C : \Set} (f : A -> B) (g : B -> C) : termMap (g o f) = termMap g o termMap f
+      => funExt (\lam _ => Term C) (fmap-composition' __)
+    \func fmap-composition' {A B C : \Set} {f : A -> B} {g : B -> C} (m : Term A) : termMap (g o f) m = (termMap g o termMap f) m \elim m
+      | app a1 a2 => pmap2 app # fmap-composition' a1 # fmap-composition' a2
+      | lam m => pmap lam (cong maybe-composition *> fmap-composition' m)
+      | var _ => idp
+      | unit => idp
+    \func maybe-composition {A B C : \Set} {f : A -> B} {g : B -> C}
+      : maybe nothing (\lam x => just (g (f x))) = maybe nothing (\lam x => just (g x)) o maybe nothing (\lam x => just (f x)) =>
+      funExt (\lam _ => Maybe C) (\lam a => cases a idp)
+  }
 -- 2. Определите отношение многошаговой редукции на Term.
 
-\func Red {V : \Set} (t s : Term V) : \Type => {?}
+\func Red {V : \Set} (t s : Term V) : \Type => ReflTransClosure Red1 t s
 
 -- 3. Стратегия редукции -- это функция, которая каждому терму сопоставляет либо некоторый терм, к которому он редуцируется за 1 шаг, либо доказательство, что таких термов нет.
 --    Определите любую стратегию редукции.
 
-\func strategy {V : \Set} (t : Term V) : Decide (\Sigma (s : Term V) (Red1 t s)) => {?}
+\func strategy {V : \Set} (t : Term V) : Decide (\Sigma (s : Term V) (Red1 t s)) \elim t
+  | app t1 t2 => \case isLam t1 \with {
+    | yes (_, p) => yes (_ >>= maybe _ _, redBeta p idp)
+    | no not-lam => \case strategy t1 \with {
+      | yes a => yes (app _ _, redAppLeft a.2 idp)
+      | no n => \case strategy t2 \with {
+        | yes a => yes (app _ _, redAppRight idp a.2)
+        | no n1 => no (\lam _x => \case _x \with {
+          | (app _ _,redAppLeft red _) => n (_, red)
+          | (app _ _,redAppRight _ red) => n1 (_, red)
+          | (_,redBeta p p1) => not-lam (_, p)
+        })
+      }
+    }
+  }
+  | lam t => \case strategy t \with {
+    | yes (_, red) => yes (lam _, redLam red)
+    | no n => no (\lam _x => \case _x \with {
+      | (lam _,redLam r) => n (_, r)
+      | (app _ _,r) => \case r
+      | (var _,r) => \case r
+      | (unit,r) => \case r
+    })
+  }
+  | unit => no (\lam (_, red) => \case red)
+  | var v => no (\lam (_, red) => \case red)
 
 -- 4. Докажите, что подтермы достижимого терма достижимы.
 
-\func appAccLeft {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t
-  => {?}
+\func appAccLeft {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t \elim a
+  | acc _x => acc (\case \elim __, \elim __ \with {
+    | _, r => appAccLeft (_x # app _ _ # redAppLeft r idp)
+  })
 
-\func appAccRight {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 s
-  => {?}
+\func appAccRight {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 s \elim a
+  | acc _x => acc (\case \elim __, \elim __ \with {
+    | _, r => appAccRight (_x # app _ _ # redAppRight idp r)
+  })
 
-\func subLamAcc {V : \Set} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t
-  => {?}
+\func subLamAcc {V : \Set} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t \elim a
+  | acc _x => acc (\case \elim __, \elim __ \with {
+    | _, r => subLamAcc (_x # lam _ # redLam r)
+  })
 
 -- 5. Докажите следующую обобщенную лемму о подстановке и выведите из нее обычную версию: если Г, x : A |- b : B и Г |- a : A, то Г |- b[a/x] : B.
 
 \func substLem {U V : \Set} (ctx : U -> Type) (b : Term U) (B : Type) (h : hasType ctx b B)
                (ctx' : V -> Type) (a : U -> Term V) (h' : \Pi (u : U) -> hasType ctx' (a u) (ctx u))
-  : hasType ctx' (b >>= a) B
-  => {?}
+  : hasType ctx' (b >>= a) B \elim b, B, h
+  | var v, B, varType idp => h' v
+  | unit, Unit, unitType => unitType
+  | app b b1, B, appType h1 h2 => appType (substLem ctx b _ h1 ctx' a h') (substLem ctx b1 _ h2 ctx' a h')
+  | lam b, Arr B B1, lamType h => lamType (substLem (maybe B ctx) b B1 h (maybe B ctx') (liftM a) (\lam u => \case \elim u \with {
+    | nothing => varType idp
+    | just a1 => unfold (liftM) {?}
+  }))
+
+\func hasTypeForMaybe {U V : \Set} (B : Type) (ctx : U -> Type) (ctx' : V -> Type) (a : U -> Term V) (a1 : U)
+                      (h' : \Pi (u : U) -> hasType ctx' (a u) (ctx u))
+  : hasType (maybe B ctx') (termMap just (a a1)) (ctx a1)
+  => cases ((a a1) arg addPath) \with {
+    | var v, p => varType (cases (rewriteF p (h' a1)) \with {
+      | varType p1 => p1
+    })
+    | unit, p => \case ctx a1 \as t, idp : t = ctx a1, (rewriteF p (h' a1)) : hasType {V} ctx' (unit {_}) t \with {
+      Unit, q, unitType => rewriteF q unitType
+    }
+    | app x1 x2, p => appType (hasTypeForMaybe {?}) (hasTypeForMaybe {?})
+    | lam x, p => {?}
+  }
 
 \func substLem1 => {?}
 
