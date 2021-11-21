@@ -3,6 +3,7 @@
 \import Function.Meta
 \import Logic.Meta
 \import Meta
+\import Paths (pmap2)
 \import Paths.Meta
 \import lect07 \hiding (<=-refl, <=-step, baz, isEven)
 \import lect10
@@ -122,7 +123,19 @@
 -- 8. Докажите, что тип с разрешимым равенством является множеством.
 
 \func Dec-isSet {A : \Type} (dec : \Pi (x y : A) -> Decide (x = y)) : isSet A
-  => {?}
+  => setLem (\lam x y => \case (dec x y) \with {
+    | yes _ => \Sigma
+    | no _ => Empty
+  }) (\lam _ _ => mcases \with {
+    | yes _ => Unit-isProp
+    | no _ => \case __, __
+  }) (\lam _ => mcases \with {
+    | yes _ => ()
+    | no n => n idp
+  }) (\lam _ _ => mcases \with {
+    | yes p => \lam _ => p
+    | no _ => absurd
+  })
 
 -- 9. Если A и B являются множествами, то A `Or` B тоже является множеством.
 
@@ -131,16 +144,53 @@
   | inr B
 
 \func or-isSet {A B : \Type} (p : isSet A) (q : isSet B) : isSet (Or A B) =>
-  {?}
+  setLem {Or A B} (\case \elim __, \elim __ \with {
+    | inl a, inl a1 => a = a1
+    | inr b, inr b1 => b = b1
+    | inl _, inr _ => Empty
+    | inr _, inl _ => Empty
+  }) (\case \elim __, \elim __, \elim __, \elim __ \with {
+    | inl _, inl _, _, _ => equality-isProp p _ _ _ _
+    | inr _, inr _, _, _ => equality-isProp q _ _ _ _
+  }) (\case \elim __ \with {
+    | inl _ => idp
+    | inr _ => idp
+  }) (\case \elim __, \elim __, \elim __ \with {
+    | inl _, inl _, _ => cong
+    | inr _, inr _, _ => cong
+  })
 
 -- 10. Если B x является множеством, то \Pi (x : A) -> B x тоже является множеством.
 
-\func pi-isSet {A : \Type} (B : A -> \Type) (p : \Pi (x : A) -> isSet (B x)) : isSet (\Pi (x : A) -> B x) => {?}
+\func pi-isSet {A : \Type} (B : A -> \Type) (p : \Pi (x : A) -> isSet (B x)) : isSet (\Pi (x : A) -> B x)
+  => setLem {\Pi (x : A) -> B x} (\lam f g => \Pi (x : A) -> f x = g x)
+      (\lam f g => forall-isProp (\lam x => f x = g x) (\lam _ => p _ (f _) (g _)))
+      (\lam _ _ => idp) (\lam _ _ => ext __)
 
 -- 11. Докажите, что если A является множеством, то List A также им является.
 
-\func List-isSet {A : \Type} (pA : isSet A) : isSet (List A)
-  => {?}
+\func List-isSet {A : \Type} (pA : isSet A) : isSet (List A) =>
+  setLem {List A} B-type (prop-prove pA) f g
+  \where {
+    \func B-type {A : \Type} (xs ys : List A) : \Type \elim xs, ys
+      | nil, nil => \Sigma
+      | :: x xs, :: y ys => \Sigma (x = y) (B-type xs ys)
+      | _, _ => Empty
+
+    \func prop-prove {A : \Type} (pA : isSet A) (xs ys : List A) : isProp (B-type xs ys) \elim xs, ys
+      | nil, nil => Unit-isProp
+      | :: _ xs, :: _ ys => Sigma-isProp (pA _ _) (prop-prove pA _ _)
+      | nil, :: _ _ => \case __, __
+      | :: _ _, nil => \case __, __
+
+    \func f {A : \Type} (xs : List A) : B-type xs xs \elim xs
+      | nil => ()
+      | :: _ _ => (idp, f _)
+
+    \func g {A : \Type} (xs ys : List A) (p : B-type xs ys) : xs = ys \elim xs, ys, p
+      | nil, nil, _ => idp
+      | :: _ xs, :: _ ys, (x=y, p) => pmap2 (::) x=y $ g xs ys p
+  }
 
 -- Optional:
 -- 12. Докажите, что n-типы замкнуты относительно образования \Pi-типов.
