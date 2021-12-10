@@ -1,15 +1,36 @@
+\import Algebra.Meta
+\import Arith.Nat (NatSemiring)
+\import Logic (TruncP, inP)
+\import Meta
+\import Paths.Meta
 \import Utils
+\import hw07
 \import lect12
 
 -- 1. Определите функцию negPred : Int -> Int такую, что negPred x = x, если x > 0, и negPred x = x - 1, если x <= 0.
 
-\func negPred (x : Int) : Int => {?}
+\func negPred (x : Int) : Int \elim x
+  | pos 0 => neg (suc zero)
+  | neg n => neg (suc n)
+  | pos n => pos n
 
 -- 2. Определите функции сложения и умножения для Int.
 
-\func \infixl 6 + (x y : Int) : Int => {?}
+\func \infixl 6 + (x y : Int) : Int \elim x, y
+  | pos (suc n), neg (suc m) => pos n + neg m
+  | neg (suc n), pos (suc m) => neg n + pos m
+  | pos n, pos m => pos (n Nat.+ m)
+  | neg (suc n), neg m => neg (suc n Nat.+ m)
+  | pos 0, neg n => neg n
+  | neg n, pos 0 => neg n
 
-\func \infixl 7 * (x y : Int) : Int => {?}
+\func \infixl 7 * (x y : Int) : Int \elim y
+  | pos 0 => pos 0
+  | pos (suc y) => x * pos y + x
+  | neg (suc y) => \case x \with {
+    | pos n => x * neg y + neg n
+    | neg n => x * neg y + pos n
+  }
 
 -- 3. Определите тип данных BinNat для бинарных натуральных чисел.
 --    У него должно быть три конструктора: для 0, для чисел вида 2*n и чисел вида 2*n+1.
@@ -17,6 +38,11 @@
 --    Используйте типы данных с условиями, чтобы вычислительно отождествить различные нули.
 
 \data BinNat
+  | bin-zero
+  | bin-odd Nat
+  | bin-even Nat \with {
+    | 0 => bin-zero
+  }
 
 -- 4. Докажите, что функция pred сюръективна.
 
@@ -24,11 +50,13 @@
   | 0 => 0
   | suc n => n
 
-\func pred-is-sur : isSur pred => {?}
+\func pred-is-sur : isSur pred => \lam _ => inP (suc _, idp)
 
 -- 5. Докажите, что функция suc не сюръективна.
 
-\func suc-is-not-sur (p : isSur suc) : Empty => {?}
+\func suc-is-not-sur (p : isSur suc) : Empty => \case p 0 \with {
+  | inP (_, q) => cases q
+}
 
 -- 6. Пусть f : A -> B и g : B -> C ─ некоторые функции.
 --    Докажите, что если f и g сюръективны, то g `o` f также сюръективна.
@@ -36,13 +64,29 @@
 
 \func \fixr 9 o {A B C : \Type} (g : B -> C) (f : A -> B) => \lam a => g (f a)
 
-\func o-sur {A B C : \Type} (f : A -> B) (g : B -> C) (p : isSur f) (q : isSur g) : isSur (g `o` f) => {?}
+\func o-sur {A B C : \Type} (f : A -> B) (g : B -> C) (p : isSur f) (q : isSur g) : isSur (g `o` f)
+  => \case q __ \with {
+    | inP (_, gb=c) => \case p _ \with {
+      | inP (_, fa=b) => inP (_, unfold o (rewrite fa=b gb=c))
+    }
+  }
 
-\func o-sur' {A B C : \Type} (f : A -> B) (g : B -> C) (p : isSur (g `o` f)) : isSur g => {?}
+\func o-sur' {A B C : \Type} (f : A -> B) (g : B -> C) (p : isSur (g `o` f)) : isSur g
+  => \case p __ \with {
+    | inP (_, gfa=c) => inP (f _, gfa=c)
+  }
 
 -- 7. Определите множество конечных подмножеств множества A, то есть списков элементов A с точностью до перестановок и повторений элементов.
 
-\data Set (A : \Set) : \Set
+\data EqualSubs {A : \Type} (xs ys : List A)
+  | eq-subs (\Sigma (\Pi (a : A) -> hw07.In a xs -> hw07.In a ys) (\Pi (a : A) -> hw07.In a ys -> hw07.In a xs))
+
+\truncated \data Set (A : \Set) : \Set
+  | finite-subs (List A)
+  | =-finite-subs (xs ys : List A) (is-eq-subs : EqualSubs xs ys) (i : I) \elim i {
+    | left => finite-subs xs
+    | right => finite-subs ys
+  }
 
 -- 8. Докажите теорему Кантора.
 
@@ -56,15 +100,37 @@
 -- "существует инъекция из A в Subs A" и "не существует сюръекции из A в Subs A".
 
 \func cantor1 (A : \Set) : \Sigma (f : A -> Subs A) (isInj f)
-  => {?}
+  => (=, \lam x y p => rewrite (pmap (__ y) p) idp)
 
 \func cantor2 (A : \Set) (f : A -> Subs A) (p : isSur f) : Empty
-  => {?}
+  => \let | not-subs => \lam a => Not (f a a)
+      \in \case p not-subs \with {
+      | inP (a, subs=not-subs) =>
+        contrProp
+            (\lam _ _ => \let include=not-include => pmap (__ a) subs=not-subs
+                         \in contrProp (rewriteI include=not-include __) (rewrite include=not-include __))
+            (\lam _ => a)
+    }
+
+-- Optional:
+-- 12. Парадокс Рассела показывает, что не существует множества всех множеств.
+-- Если такое множеств существует, то мы можем определить множество B, состоящее из множеств, не содержащих себя.
+-- Тогда B принадлежит себе тогда и только тогда, когда оно себе не принадлежит.
+-- Отсюда следует противоречии.
+-- Теорема Кантора утверждает, что не сущесвует множества X с сюръекцией из X в множество подмножеств X.
+-- Ее доказательство также конструирует утверждение, которое верно тогда и только тогда, когда оно ложно.
+-- Верно, что в общем случае существование такого утверждения влечет противоречие.
+-- Это легко доказать при помощи исключенного третьего, но утверждение верно и без него.
+-- Докажите этот факт.
+\func contrProp {A : \Type} (p : A -> Not A) (q : Not A -> A) : Empty
+  => \let a => q (\lam a => p a a) \in p a a
 
 -- 9. Докажите, что in~ является сюръекцией.
 
 \func in~-sur {A : \Type} {R : A -> A -> \Type} : isSur (in~ {A} {R})
-  => {?}
+  => \lam b => cases (b arg addPath) \with {
+    | in~ a, _ => inP (a, idp)
+  }
 
 -- Optional
 -- 10. Постройте функции Nat -> BinNat и BinNat -> Nat и докажите, что они взаимно обратны.
