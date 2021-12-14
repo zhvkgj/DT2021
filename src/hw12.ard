@@ -39,9 +39,9 @@
 
 \data BinNat
   | bin-zero
-  | bin-odd Nat
-  | bin-even Nat \with {
-    | 0 => bin-zero
+  | bin-odd BinNat
+  | bin-even BinNat \with {
+    | bin-zero => bin-zero
   }
 
 -- 4. Докажите, что функция pred сюръективна.

@@ -1,32 +1,152 @@
+\import Algebra.Meta
+\import Function.Meta
+\import Logic (inP, truncP)
+\import Meta
+\import Paths (inv)
+\import Paths.Meta
 \import Utils
+\import lect01 (three)
+\import lect05 (funExt)
+\import lect07 (Decide)
+\import lect11 (propExt)
 \import lect12
 \import lect13
 
 -- 1. Докажите, что add x (add x s) = add x s и add x (add y s) = add y (add x s)
 
 \func add-idemp {S : SetSpec} (x : S.A) (s : S) : add x (add x s) = add x s
-  => {?}
+  => setExt _ _ (\lam _ => (\case addProp __ \with {
+    | byLeft a => rewrite a addHead
+    | byRight b => b
+  }, addTail))
 
-\func add-swap {S : SetSpec} (x y : S.A) (s : S) : add x (add y s) = add y (add x s)
-  => {?}
+\func add-swap {S : SetSpec} (x y : S.A) (s : S) : add x (add y s) = add y (add x s) =>
+  setExt _ _ (\lam _ => (
+    \case addProp __ \with {
+    | byLeft a => rewrite a (addTail addHead)
+    | byRight b => \case addProp b \with {
+      | byLeft a => rewrite a addHead
+      | byRight b1 => addTail (addTail b1)
+      }
+    },
+    \case addProp __ \with {
+    | byLeft a => rewrite a (addTail addHead)
+    | byRight b => \case addProp b \with {
+      | byLeft a => rewrite a addHead
+      | byRight b1 => addTail (addTail b1)
+      }
+    }))
 
 -- 2. Докажите, что множество подмножеств является инстансом SetSpec
 
 \func subsets {A : \Set} : SetSpec {A} (A -> \Prop)
-  => {?}
+  => Subsets
+
+\instance Subsets {A : \Set} : SetSpec {A} (A -> \Prop)
+  | emptySet : A -> \Prop => \lam _ => Empty
+  | add (a : A) (s : A -> \Prop) : A -> \Prop => \lam b => Or (b = a) (s b)
+  | isElem (a : A) (s : A -> \Prop) : \Prop => s a
+  | setExt (s s' : A -> \Prop) (p : \Pi (a : A) -> isElem a s <-> isElem a s') : s = s'
+  => ext (\lam a => \let (in, out) => p a \in propExt in out)
+  | emptySetProp (a : A) : Not (isElem a emptySet)
+  => unfold __
+  | addHead {a : A} {s : A -> \Prop} : isElem a (add a s)
+  => byLeft idp
+  | addTail {a b : A} {s : A -> \Prop} : isElem a s -> isElem a (add b s)
+  => byRight __
+  | addProp {a b : A} {s : A -> \Prop} : isElem a (add b s) -> Or (a = b) (isElem a s)
+  => \case __ \with {
+    | byLeft p => byLeft p
+    | byRight q => byRight q
+  }
 
 -- 3. Докажите, что множество подмножеств является наибольшим инстансом, то есть любой другой вкладывается в него.
 
 \func subsets-largest (S : SetSpec) : \Sigma (f : S -> (S.A -> \Prop)) (isInj f)
-  => {?}
+  => (\lam s a => isElem a s,
+      \lam s s' p => setExt s s' (\lam a => \let q => pmap (__ a) p
+                                            \in rewrite q (\lam x => x, \lam x => x)))
 
 -- 4. Определите функцию isEmpty для произвольного конечного множества и для ListSet.
 
-\func isEmptySet {S : FinSetSpec} (x : S) : Bool => {?}
+\func eqList=>eqEmpty {A : \Set} {xs ys : List A} (r : EqList xs ys) :
+  (\case xs \with {
+    | nil => true
+    | :: _ _ => false
+  }) = (\case ys \with {
+    | nil => true
+    | :: _ _ => false
+  }) \elim xs, ys
+  | nil, nil => idp
+  | :: x xs, :: y ys => idp
+  | nil, :: _ _ => \case (r _).2 (here idp)
+  | :: _ _, nil => \case (r _).1 (here idp)
 
-\func isEmptyListSet {A : \Set} (x : ListSet A) : Bool => {?}
+\func isEmptySet {S : FinSetSpec} (x : S) : Bool
+  => isEmptyListSet (rewrite listSet=Set x)
+
+\func isEmptyListSet {A : \Set} (x : ListSet A) : Bool \elim x
+  | in~ a => \case a \with {
+    | nil => true
+    | :: _ _ => false
+  }
+  | ~-quot r i => eqList=>eqEmpty r @ i
 
 -- 5. Определите функцию union {A : \Set} : S A -> S A -> S A для произвольного S A (удовлетворяющего FinSetSpec) и для ListSet.
+
+\func unionSet {S : FinSetSpec} (s : S) (s' : S) : S
+  => rewriteI listSet=Set $ unionListSet (rewrite listSet=Set s) (rewrite listSet=Set s')
+
+\func concat-eq-left {A : \Set} (xs ys zs : List A) (r : EqList ys zs) : EqList (xs ++ ys) (xs ++ zs)
+  => \lam _ => (concat-in-left-same r __, concat-in-left-same (eqList-inv r) __)
+
+\func eqList-inv {A : \Set} {xs ys : List A} (r : EqList xs ys) : EqList ys xs
+  => \lam _ => \let (in, out) => r _ \in (out, in)
+
+\func concat-in-left-same {A : \Set} {x : A} {xs ys zs : List A} (r : EqList ys zs) (in : In x (xs ++ ys)) : In x (xs ++ zs)
+  => \case concat-in in \with {
+    | byLeft p => in-part=>in-concat-left p
+    | byRight q => in-part=>in-concat-right $ (r x).1 q
+  }
+
+\func in-part=>in-concat-left {A : \Set} {a : A} {xs ys : List A} (in : In a xs) : In a (xs ++ ys) \elim xs, ys, in
+  | :: _ _, nil, here p => here p
+  | :: _ _, :: _ _, here p => here p
+  | :: _ _, _, there in => there $ in-part=>in-concat-left in
+
+\func in-part=>in-concat-right {A : \Set} {a : A} {xs ys : List A} (in : In a ys) : In a (xs ++ ys) \elim xs, ys, in
+  | nil, :: _ _, here p => here p
+  | nil, :: _ _, there in => there in
+  | :: _ _, :: _ _, p => there $ in-part=>in-concat-right p
+
+\func concat-in {A : \Set} {a : A} {xs ys : List A} (in : In a (xs ++ ys)) : In a xs `Or` In a ys \elim xs, ys, in
+  | nil, :: _ _, here p => byRight $ here p
+  | nil, :: _ _, there in => byRight $ there in
+  | :: _ _, nil, here p => byLeft $ here p
+  | :: _ _, nil, there in => byLeft $ there $ nill-right-zero-for-in in
+  | :: _ _, :: _ _, here p => byLeft $ here p
+  | :: x xs, :: y ys, there in => \case concat-in in \with {
+    | byLeft p => byLeft $ there p
+    | byRight q => byRight q
+  }
+
+\func nill-right-zero-for-in {A : \Set} {x : A} {xs : List A} (in : In x (xs ++ nil)) : In x xs \elim xs, in
+  | :: _ _, here p => here p
+  | :: _ _, there in => there (nill-right-zero-for-in in)
+
+\func concat-eq-right {A : \Set} (xs ys : List A) (zs : List A) (r : EqList xs ys) : EqList (xs ++ zs) (ys ++ zs)
+  => \lam _ => (concat-in-right-same r __, concat-in-right-same (eqList-inv r) __)
+
+\func concat-in-right-same {A : \Set} {x : A} {xs ys zs : List A} (r : EqList xs ys) (in : In x (xs ++ zs)) : In x (ys ++ zs)
+  => \case concat-in in \with {
+    | byLeft p => in-part=>in-concat-left $ (r x).1 p
+    | byRight q => in-part=>in-concat-right q
+  }
+
+\func unionListSet {A : \Set} (xs : ListSet A) (ys : ListSet A) : ListSet A \elim xs, ys
+  | in~ xs, in~ ys => in~ (xs ++ ys)
+  | in~ xs, ~-quot {a} {a'} r i => ~-quot (concat-eq-left xs a a' r) i
+  | ~-quot {a} {a'} r i, in~ xs => ~-quot (concat-eq-right a a' xs r) i
 
 -- 6. Определите функцию intersection {A : DecSet} : S A -> S A -> S A для произвольного S A (удовлетворяющего FinSetSpec) и для ListSet.
 
